@@ -86,7 +86,7 @@ export default function App() {
               <MovieSidebar movies={ws.movies} selectedId={ws.selectedId} onSelect={ws.selectMovie} onCreate={ws.createMovie} busy={ws.saving} />
               <div className="min-w-0 space-y-6">
                 <div className="grid gap-6 xl:grid-cols-2">
-                  <VoiceCoach voiceConfigured={voiceConfigured} busy={ws.saving} onApprove={ws.applyProposal} />
+                  <VoiceCoach voiceConfigured={voiceConfigured} busy={ws.saving} ws={ws} />
                   <TodaysFocus
                     focus={ws.focus}
                     busy={ws.saving}
