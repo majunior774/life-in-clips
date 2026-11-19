@@ -221,6 +221,14 @@ All routes are under `/api`; errors look like `{ "error": { "message", "details?
 
 ## Troubleshooting
 
+In production, check your backend host's function/runtime logs (in Vercel, open the backend
+project's **Logs**). Each request emits a JSON
+`http.request.completed` entry with its `requestId`, method, path, status, and duration; error
+entries use the same request ID so you can match the failure to its request. Startup/configuration,
+database connection and health-check failures also emit diagnostic events. Logs intentionally omit
+query strings, request bodies, authorization headers, and redact configured secrets and MongoDB URI
+credentials. The API response includes the matching `X-Request-Id` header.
+
 | Symptom | Likely cause |
 | --- | --- |
 | Local backend exits with "MONGODB_URI is not set" | Create `backend/.env` from `backend/.env.example` |

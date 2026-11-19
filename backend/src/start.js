@@ -3,30 +3,41 @@
 import { config, missingRequiredConfig } from './config.js';
 import { connectDb } from './lib/db.js';
 import { createApp } from './createApp.js';
+import { log } from './lib/logger.js';
 
 const problems = missingRequiredConfig();
+log('info', 'backend.initialized', {
+  runtime: 'long_running',
+  production: config.isProduction,
+  mongodbConfigured: Boolean(config.mongodbUri),
+  accessKeyConfigured: Boolean(config.accessKey),
+  frontendOriginConfigured: config.frontendOriginExplicit,
+  geminiConfigured: Boolean(config.geminiApiKey),
+});
 if (problems.length) {
-  console.error('\nConfiguration error:\n' + problems.map((p) => `  - ${p}`).join('\n') + '\n');
+  log('error', 'backend.misconfigured', { problems });
   process.exit(1);
 }
 
 try {
   await connectDb();
-  console.log('[db] Connected to MongoDB.');
+  log('info', 'database.connected');
 } catch (err) {
-  console.error(`\n[db] ${err.message}`);
-  if (err.cause) console.error(`[db] Detail: ${err.cause}`);
-  console.error('[db] The server will not start without a database. It does not fall back to other storage.\n');
+  log('error', 'database.startup_connection_failed', {
+    errorName: err?.name,
+    message: err?.message,
+    cause: err?.cause,
+  });
   process.exit(1);
 }
 
 if (!config.geminiApiKey) {
-  console.warn('[voice] GEMINI_API_KEY is not set. The dashboard works; the voice coach will report it is unavailable.');
+  log('warn', 'voice.not_configured');
 }
 if (!config.accessKey) {
-  console.warn('[auth] ACCESS_KEY is not set: the API is open. Fine for local development only.');
+  log('warn', 'auth.access_key_not_configured');
 }
 
 createApp().listen(config.port, () => {
-  console.log(`[server] API listening on http://localhost:${config.port}/api`);
+  log('info', 'backend.listening', { port: config.port });
 });

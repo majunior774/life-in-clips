@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { config } from '../config.js';
+import { log } from './logger.js';
 
 const STATES = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
 
@@ -54,13 +55,14 @@ export async function disconnectDb() {
 }
 
 /** Database connectivity snapshot used by the health endpoint. */
-export async function dbStatus() {
+export async function dbStatus(requestId) {
   const state = STATES[mongoose.connection.readyState] ?? 'unknown';
   if (mongoose.connection.readyState !== 1) return { state, reachable: false };
   try {
     await mongoose.connection.db.admin().ping();
     return { state, reachable: true };
-  } catch {
+  } catch (err) {
+    log('warn', 'database.health_check_failed', { requestId, errorName: err?.name, message: err?.message });
     return { state, reachable: false };
   }
 }

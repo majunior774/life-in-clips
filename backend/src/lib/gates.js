@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { config } from '../config.js';
 import { HttpError } from './errors.js';
 import { createLimiter } from './rateLimit.js';
+import { log } from './logger.js';
 
 const isOpenRoute = (req) => req.method === 'OPTIONS' || req.path === '/health';
 
@@ -59,6 +60,14 @@ export function dbGate(ensureDb) {
       next();
     } catch (err) {
       if (req.path === '/health') return next();
+      log('error', 'database.connection_failed', {
+        requestId: req.requestId,
+        method: req.method,
+        path: req.path,
+        errorName: err?.name,
+        message: err?.message,
+        cause: err?.cause,
+      });
       next(new HttpError(503, err.message || 'Database unavailable.'));
     }
   };

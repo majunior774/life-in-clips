@@ -3,10 +3,20 @@
 import { createApp } from './src/createApp.js';
 import { ensureDb } from './src/lib/db.js';
 import { missingRequiredConfig } from './src/config.js';
+import { config } from './src/config.js';
+import { log } from './src/lib/logger.js';
 
 const configProblems = missingRequiredConfig();
+log('info', 'backend.initialized', {
+  runtime: 'serverless',
+  production: config.isProduction,
+  mongodbConfigured: Boolean(config.mongodbUri),
+  accessKeyConfigured: Boolean(config.accessKey),
+  frontendOriginConfigured: config.frontendOriginExplicit,
+  geminiConfigured: Boolean(config.geminiApiKey),
+});
 if (configProblems.length) {
-  console.error('[config] Backend is misconfigured:\n' + configProblems.map((p) => `  - ${p}`).join('\n'));
+  log('error', 'backend.misconfigured', { problems: configProblems });
 }
 
 export default createApp({ ensureDb, configProblems });

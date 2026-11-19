@@ -190,6 +190,56 @@ test('API responses are not cacheable and set nosniff', async () => {
   }
 });
 
+test('request logs include a trace id and status without query strings or auth headers', async () => {
+  const app = await startApp();
+  const original = { info: console.info, warn: console.warn, error: console.error };
+  const lines = [];
+  for (const level of Object.keys(original)) console[level] = (line) => lines.push(String(line));
+  try {
+    const response = await app.call('/health?private-query-value', {
+      headers: { Authorization: 'Bearer private-access-value' },
+    });
+    const requestId = response.headers.get('x-request-id');
+    assert.match(requestId, /^[0-9a-f-]{36}$/i);
+    const entry = lines.map((line) => JSON.parse(line)).find((line) => line.event === 'http.request.completed');
+    assert.equal(entry.requestId, requestId);
+    assert.equal(entry.method, 'GET');
+    assert.equal(entry.path, '/health');
+    assert.equal(entry.status, 503);
+    assert.equal(typeof entry.durationMs, 'number');
+    assert.ok(!lines.join('\n').includes('private-query-value'));
+    assert.ok(!lines.join('\n').includes('private-access-value'));
+  } finally {
+    for (const [level, method] of Object.entries(original)) console[level] = method;
+    app.close();
+  }
+});
+
+test('database failure logs a useful message but redacts URI credentials', async () => {
+  const uri = 'mongodb+srv://private-user:private-pass@cluster.example/db';
+  await withConfig({ mongodbUri: uri, accessKey: '' }, async () => {
+    const app = await startApp({
+      ensureDb: async () => {
+        throw new Error(`Could not connect to MongoDB: server selection timed out for ${uri}`);
+      },
+    });
+    const originalError = console.error;
+    const lines = [];
+    console.error = (line) => lines.push(String(line));
+    try {
+      const response = await app.call('/movies');
+      assert.equal(response.status, 503);
+      const entry = lines.map((line) => JSON.parse(line)).find((line) => line.event === 'database.connection_failed');
+      assert.match(entry.message, /server selection timed out/);
+      assert.ok(!lines.join('\n').includes('private-user'));
+      assert.ok(!lines.join('\n').includes('private-pass'));
+    } finally {
+      console.error = originalError;
+      app.close();
+    }
+  });
+});
+
 test('rate limiter: blocks after max, reports retry time, and recovers after the window', async () => {
   const limiter = createLimiter({ windowMs: 60, max: 2 });
   assert.equal(limiter.hit('k').allowed, true);

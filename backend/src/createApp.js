@@ -4,6 +4,8 @@ import { config } from './config.js';
 import { api } from './routes.js';
 import { errorHandler, notFoundHandler } from './lib/errors.js';
 import { accessGate, configGate, dbGate } from './lib/gates.js';
+import { randomUUID } from 'node:crypto';
+import { log } from './lib/logger.js';
 
 /**
  * @param {object} [options]
@@ -14,6 +16,23 @@ export function createApp({ ensureDb, configProblems = [] } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
+
+  app.use((req, res, next) => {
+    const requestId = randomUUID();
+    const startedAt = Date.now();
+    req.requestId = requestId;
+    res.set('X-Request-Id', requestId);
+    res.on('finish', () => {
+      log(res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info', 'http.request.completed', {
+        requestId,
+        method: req.method,
+        path: req.path,
+        status: res.statusCode,
+        durationMs: Date.now() - startedAt,
+      });
+    });
+    next();
+  });
 
   app.use(
     cors({

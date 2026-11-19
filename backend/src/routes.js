@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { GoogleGenAI } from '@google/genai';
 import { buildLiveConfig } from './coach.js';
 import { createLimiter, limitRequests } from './lib/rateLimit.js';
+import { log } from './lib/logger.js';
 
 export const api = Router();
 
@@ -17,8 +18,8 @@ const voiceLimit = limitRequests(
 
 /* ----------------------------- Health ----------------------------- */
 // `server` is always "ok" if this responds; `database` reports Atlas connectivity separately.
-api.get('/health', async (_req, res) => {
-  const database = await dbStatus();
+api.get('/health', async (req, res) => {
+  const database = await dbStatus(req.requestId);
   res.status(database.reachable ? 200 : 503).json({
     server: { status: 'ok', uptimeSeconds: Math.round(process.uptime()) },
     database,
@@ -91,13 +92,20 @@ api.post('/proposals/apply', async (req, res) => {
 /* --------------------------- Voice credentials --------------------------- */
 // Mints a single-use, short-lived Gemini Live token. The permanent GEMINI_API_KEY never leaves
 // the server, and the session config (instructions + tools) is locked into the token.
-api.post('/voice/session', voiceLimit, async (_req, res) => {
+api.post('/voice/session', voiceLimit, async (req, res) => {
   if (!config.geminiApiKey) {
     throw new HttpError(503, 'GEMINI_API_KEY is not configured on the server, so voice is unavailable.');
   }
   const today = new Date().toISOString().slice(0, 10);
   // The coach can still run without the workspace snapshot, so a failure here is non-fatal.
-  const summary = await svc.workspaceSummary().catch(() => '');
+  const summary = await svc.workspaceSummary().catch((err) => {
+    log('warn', 'voice.workspace_summary_failed', {
+      requestId: req.requestId,
+      errorName: err?.name,
+      message: err?.message,
+    });
+    return '';
+  });
   const liveConfig = buildLiveConfig(summary, today);
   const apiVersion = config.geminiApiVersion;
   const expireTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
@@ -117,7 +125,7 @@ api.post('/voice/session', voiceLimit, async (_req, res) => {
   } catch (err) {
     // Never forward the upstream message: it can contain request details.
     const status = Number(err?.status);
-    console.error('[voice] token request failed', status || err?.name);
+    log('error', 'voice.token_request_failed', { requestId: req.requestId, status: status || undefined, errorName: err?.name });
     if (status === 400 || status === 404) {
       throw new HttpError(
         502,

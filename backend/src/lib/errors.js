@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { ZodError } from 'zod';
+import { log } from './logger.js';
 
 export class HttpError extends Error {
   constructor(status, message, details) {
@@ -18,11 +19,31 @@ export function parseId(value, label = 'id') {
 }
 
 export function notFoundHandler(req, res) {
+  log('warn', 'http.request.not_found', { requestId: req.requestId, method: req.method, path: req.path });
   res.status(404).json({ error: { message: `No route for ${req.method} ${req.path}` } });
 }
 
 /* eslint-disable-next-line no-unused-vars */
 export function errorHandler(err, req, res, next) {
+  let status = 500;
+  if (err instanceof HttpError) status = err.status;
+  else if (err instanceof ZodError || err?.type === 'entity.parse.failed') status = 400;
+  else if (err?.type === 'entity.too.large') status = 413;
+  else if (err instanceof mongoose.Error.CastError || err instanceof mongoose.Error.ValidationError) status = 400;
+  else if (err?.name?.startsWith('Mongo')) status = 503;
+  log(status >= 500 ? 'error' : 'warn', 'http.request.failed', {
+    requestId: req.requestId,
+    method: req.method,
+    path: req.path,
+    status,
+    errorName: err?.name,
+    message:
+      err instanceof HttpError
+        ? err.message
+        : err?.name?.startsWith('Mongo')
+          ? err.message
+          : 'Request processing failed.',
+  });
   if (err instanceof HttpError) {
     return res.status(err.status).json({ error: { message: err.message, details: err.details } });
   }
@@ -44,9 +65,7 @@ export function errorHandler(err, req, res, next) {
     return res.status(400).json({ error: { message: 'Invalid data.' } });
   }
   if (err?.name?.startsWith('Mongo')) {
-    console.error('[db]', err.name);
     return res.status(503).json({ error: { message: 'Database error. Check /api/health.' } });
   }
-  console.error('[server]', err?.stack || err);
   res.status(500).json({ error: { message: 'Internal server error.' } });
 }

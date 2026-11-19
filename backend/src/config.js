@@ -2,9 +2,11 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
 
 // Local development only: backend/.env first, then a repo-root .env as a fallback.
-// Neither overrides real environment variables (which is how hosts like Vercel provide them).
-dotenv.config({ quiet: true });
-dotenv.config({ path: fileURLToPath(new URL('../../.env', import.meta.url)), quiet: true });
+// Tests use explicit process.env values and must not inherit local developer secrets.
+if (process.env.NODE_ENV !== 'test') {
+  dotenv.config({ quiet: true });
+  dotenv.config({ path: fileURLToPath(new URL('../../.env', import.meta.url)), quiet: true });
+}
 
 const list = (v) =>
   String(v || '')
