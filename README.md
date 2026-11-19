@@ -27,7 +27,8 @@ The repo holds **two independent projects**, deployable separately (for example 
 - Today's Focus (max 3 clips, validated against existing clips).
 - Persistence in MongoDB Atlas via Mongoose, with server-side validation.
 - Live voice coach using the Gemini Live API (streamed audio over a WebSocket), with transcript and interruption support.
-- Approval gate: the coach can only *propose* a plan; you review it and press **Approve & save** (or Reject).
+- Approval gate: a new plan is only *proposed*; you press **Approve & save** (or Reject), or tell the coach "approve it".
+- Coach actions on existing data, by voice: edit movies and clips, tick clips done, add clips, set Today's Focus, approve/reject waiting plans. Each action appears in a **Coach activity** list with **Undo**. Deleting needs your click on an on-screen confirmation.
 - Access-key gate, CORS allow-list, best-effort rate limits, and a health endpoint that reports server and database state separately.
 
 Not included (by design): user accounts, teams, calendar sync, notifications, streaks, analytics, background agents.
@@ -39,10 +40,10 @@ Be aware of this before relying on the app. Details are in [AGENTS.md](AGENTS.md
 | Area | Status |
 | --- | --- |
 | Lint (both projects), frontend production build | Passed |
-| Backend tests, no database needed (`npm test`, 20 tests): validation, error shapes, access key and lockout, production fail-closed config, CORS, DB-down handling, rate limits, token request shape | Passed |
+| Backend tests, no database needed (`npm test`, 23 backend + 10 frontend tests): validation, error shapes, access key and lockout, production fail-closed config, CORS, DB-down handling, rate limits, token request shape | Passed |
 | Vercel entry file (`backend/index.js`) loads and answers HTTP requests as a handler | Passed (locally) |
 | Real Express backend + built frontend on two different origins: unlock screen, wrong/right key, DB-down message, no CORS errors | Passed (headless browser) |
-| Dashboard and voice flows in a headless browser against a **mocked** API / **mock** Gemini WebSocket | Passed |
+| Dashboard, voice and coach-action flows (tick, edit, voice-approve, delete confirmation, undo) in a headless browser against a **mocked** API / **mock** Gemini WebSocket | Passed |
 | CRUD, focus and proposal persistence against **real MongoDB** | **Not yet run** (use `npm run smoke` in `backend/`) |
 | A real **Gemini token request and live voice session** | **Not yet run** |
 | An actual **Vercel deployment** | **Not yet done** |
@@ -208,6 +209,7 @@ All routes are under `/api`; errors look like `{ "error": { "message", "details?
 | `GET /focus?date=YYYY-MM-DD`, `PUT /focus` | Read / set Today's Focus (`{date, clipIds}`, max 3) |
 | `POST /proposals/validate` | Dry-run validation of an AI proposal (saves nothing) |
 | `POST /proposals/apply` | Validate and save an approved proposal |
+| `GET /workspace` | Compact movies + clips with ids (used by the coach's `get_workspace` tool) |
 | `POST /voice/session` | Mint a single-use Gemini Live token plus the locked session config (rate limited) |
 
 ## Current limitations
@@ -215,7 +217,7 @@ All routes are under `/api`; errors look like `{ "error": { "message", "details?
 - One shared access key, no user accounts; no clip drag-and-drop reordering (order is assigned at creation).
 - Rate limits and lockout counters are per server instance. On Vercel each warm instance has its own, so they slow down guessing and loops but are not a global hard limit.
 - Today's Focus is per calendar date; no reminders or scheduling.
-- The coach can create new movies with clips; it cannot edit or delete existing data (by design for now).
+- The coach acts only when you ask. It cannot see archived movies, and it cannot delete anything without your click. Its actions go through the same validated API as the buttons.
 - Voice, persistence and Vercel deployment are implemented but not yet verified end-to-end (see the table above).
 - The default Live model name and API version come from Google's docs and SDK; set `GEMINI_LIVE_MODEL` / `GEMINI_API_VERSION` if your account needs different ones. Gemini Live audio sessions have a time limit; press Reconnect if a long one ends.
 

@@ -125,7 +125,8 @@ test('voice session mints a single-use token with the locked coach config', asyn
       assert.equal(status, 200, JSON.stringify(json));
       assert.equal(json.token, 'auth_tokens/abc123');
       assert.equal(json.apiVersion, 'v1alpha');
-      assert.equal(json.config.tools[0].functionDeclarations[0].name, 'propose_plan');
+      const names = json.config.tools[0].functionDeclarations.map((d) => d.name).sort();
+      assert.deepEqual(names, ['add_clips', 'approve_pending_plan', 'get_workspace', 'propose_plan', 'reject_pending_plan', 'request_delete', 'set_todays_focus', 'update_clip', 'update_movie']);
       assert.ok(!JSON.stringify(json).includes('SECRET123'), 'API key must never be returned');
       assert.equal(seen.length, 1);
       assert.match(seen[0].url, /auth_tokens/);
@@ -134,6 +135,8 @@ test('voice session mints a single-use token with the locked coach config', asyn
       assert.equal(body.uses, 1);
       const text = JSON.stringify(body);
       assert.match(text, /propose_plan/);
+      assert.match(text, /request_delete/);
+      assert.match(text, /ONLY when the user's latest request/);
       assert.match(text, /accountability coach/);
       assert.match(text, /AUDIO/);
     },

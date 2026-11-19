@@ -116,6 +116,21 @@ export function useWorkspace() {
     reload: load,
     dismissError: () => setActionError(null),
     selectMovie,
+    /** Run any API change, refresh the dashboard in place, and report {ok, result, message}. Never throws. */
+    perform: async (fn, preferId) => {
+      setSaving((n) => n + 1);
+      try {
+        const result = await fn();
+        await refresh(preferId);
+        return { ok: true, result };
+      } catch (err) {
+        if (err.status === 401) setAuthError(err.message);
+        await refresh(preferId).catch(() => {});
+        return { ok: false, message: err.message };
+      } finally {
+        setSaving((n) => n - 1);
+      }
+    },
     createMovie: async (data) => {
       const movie = await mutate(() => api.createMovie(data));
       if (movie) await refresh(movie.id);

@@ -28,6 +28,9 @@ api.get('/health', async (req, res) => {
   });
 });
 
+/* --------------------------- Workspace snapshot --------------------------- */
+api.get('/workspace', async (_req, res) => res.json({ workspace: await svc.workspaceSnapshot() }));
+
 /* ----------------------------- Movies ----------------------------- */
 api.get('/movies', async (_req, res) => res.json({ movies: await svc.listMovies() }));
 
