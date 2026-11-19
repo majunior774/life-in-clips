@@ -11,9 +11,9 @@ import { log } from './lib/logger.js';
  * @param {object} [options]
  * @param {() => Promise<void>} [options.ensureDb]  connect lazily per request (serverless)
  * @param {string[]} [options.configProblems]       refuse API calls while non-empty
+ * @param {import('express').Express} [options.app] pre-created app instance
  */
-export function createApp({ ensureDb, configProblems = [] } = {}) {
-  const app = express();
+export function createApp({ ensureDb, configProblems = [], app = express() } = {}) {
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
 

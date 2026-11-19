@@ -122,6 +122,21 @@ test('config problems block the API with a visible reason but not health', async
   }
 });
 
+test('Vercel entrypoint exports an Express app that serves the API', async () => {
+  const { default: app } = await import('../index.js');
+  const server = await new Promise((resolve) => {
+    const listener = app.listen(0, () => resolve(listener));
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/health`);
+    assert.equal(response.status, 503);
+    assert.match(response.headers.get('content-type'), /application\/json/);
+    assert.equal((await response.json()).server.status, 'ok');
+  } finally {
+    server.close();
+  }
+});
+
 test('CORS allows configured origins only (including several), with Authorization header', async () => {
   await withConfig({ frontendOrigins: ['https://a.example.app', 'https://b.example.app'] }, async () => {
     const app = await startApp();
