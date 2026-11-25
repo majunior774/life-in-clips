@@ -83,6 +83,7 @@ export function useVoiceSession({ onProposal }) {
     }
     sourcesRef.current.clear();
     nextTimeRef.current = 0;
+    micNodeRef.current?.port.postMessage({ type: 'coach-speaking', speaking: false });
     setCoachSpeaking(false);
   }, []);
 
@@ -115,6 +116,7 @@ export function useVoiceSession({ onProposal }) {
     if (!ctx) return;
     const pcm = base64ToInt16(b64);
     if (pcm.length === 0) return;
+    micNodeRef.current?.port.postMessage({ type: 'coach-speaking', speaking: true });
     const buffer = ctx.createBuffer(1, pcm.length, OUTPUT_SAMPLE_RATE);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < pcm.length; i++) data[i] = pcm[i] / 32768;
@@ -127,7 +129,10 @@ export function useVoiceSession({ onProposal }) {
     sourcesRef.current.add(src);
     src.onended = () => {
       sourcesRef.current.delete(src);
-      if (sourcesRef.current.size === 0) setCoachSpeaking(false);
+      if (sourcesRef.current.size === 0) {
+        micNodeRef.current?.port.postMessage({ type: 'coach-speaking', speaking: false });
+        setCoachSpeaking(false);
+      }
     };
     setCoachSpeaking(true);
   }, []);
@@ -258,10 +263,20 @@ export function useVoiceSession({ onProposal }) {
       await ctx.audioWorklet.addModule('/pcm-capture-worklet.js');
       const mic = new AudioWorkletNode(ctx, 'pcm-capture');
       mic.port.onmessage = (e) => {
-        if (mutedRef.current || !liveRef.current) return;
-        liveRef.current.sendRealtimeInput({
-          audio: { data: bytesToBase64(new Uint8Array(e.data)), mimeType: 'audio/pcm;rate=16000' },
-        });
+        const sendAudio = (chunk) => {
+          if (mutedRef.current || !liveRef.current) return;
+          liveRef.current.sendRealtimeInput({
+            audio: { data: bytesToBase64(new Uint8Array(chunk)), mimeType: 'audio/pcm;rate=16000' },
+          });
+        };
+        if (e.data?.type === 'interrupt') {
+          openRef.current.coach = null;
+          stopPlayback();
+          setUserSpeaking(true);
+          e.data.chunks.forEach(sendAudio);
+          return;
+        }
+        sendAudio(e.data);
       };
       ctx.createMediaStreamSource(stream).connect(mic);
       micNodeRef.current = mic;
@@ -273,7 +288,7 @@ export function useVoiceSession({ onProposal }) {
       setError(err.message || 'Could not start the voice session.');
       setStatus('error');
     }
-  }, [cleanup, handleMessage]);
+  }, [cleanup, handleMessage, stopPlayback]);
 
   const disconnect = useCallback(() => {
     cleanup();

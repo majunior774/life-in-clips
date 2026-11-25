@@ -44,7 +44,8 @@ frontend/                    React SPA; Vercel Root Directory = frontend
   src/App.jsx, main.jsx, index.css   (Tailwind v4 @theme tokens + .btn/.card/.input)
   src/hooks/useWorkspace.js    persisted state; `mutate` → save → refetch; optimistic clip status; authError on 401
   src/hooks/useVoiceSession.js Gemini Live transport only (WebSocket, mic worklet, PCM playback; no dashboard knowledge)
-  public/pcm-capture-worklet.js  AudioWorklet: mic → 16 kHz PCM16 chunks
+  public/pcm-capture-worklet.js  AudioWorklet: mic → 16 kHz PCM16 chunks; suppresses coach
+                                 playback audio and opens the mic on detected user interruption
   src/components/            MovieSidebar, MovieDetail, ClipRow, ClipForm, MovieForm, TodaysFocus,
                              VoiceCoach (owns pending proposals), ProposalCard, AccessGate, ui.jsx
   src/lib/api.js (fetch client: VITE_API_URL base, Bearer key, ApiError, health tolerates 503),
@@ -78,7 +79,7 @@ Production diagnostics now emit structured JSON request logs with a response `X-
 
 Verified in the build sessions: lint clean in both projects; frontend build OK; backend `npm test` 23/23 pass (validation, error shapes, health, redaction, token request shape with Google's HTTP endpoint stubbed, access key + lockout, production fail-closed, CORS incl. multiple origins and preflight, serverless DB gate returning 503 with CORS headers, rate limits, safe request/database logging, Vercel entrypoint health route); `backend/index.js` imported as a default-export handler and served over HTTP (fails closed in an unconfigured production env); `start.js` exits 1 with clear, credential-free messages for missing/malformed/unresolvable `MONGODB_URI` and for a production env without `ACCESS_KEY`/`FRONTEND_ORIGIN`; headless-Chromium checks: dashboard flows against a **mocked** `/api` (14), voice flow against a **mock** Gemini WebSocket with a fake mic (16), and the **real** Express app + built frontend on two origins (unlock screen, wrong/right key, DB-down message, Lock, no CORS errors) (8). These browser scripts were ad hoc and are not committed.
 
-Current changes verified: `npm.cmd run lint`, `npm.cmd test` (23/23), `npm.cmd run build`, and `git diff --check` pass. The Vercel CLI build failure was caused by the root entrypoint not directly importing Express; it now imports/instantiates Express, and the API handler route is covered by a test. A real Vercel deployment still needs redeployment and verification.
+Current changes verified: `npm.cmd run lint`, `npm.cmd test` (backend 23/23; frontend audio-worklet 2/2), `npm.cmd run build`, and `git diff --check` pass. The voice capture gate suppresses mic audio during coach playback, then opens on sustained voice and sends the buffered onset to preserve interruption behavior. The Vercel CLI build failure was caused by the root entrypoint not directly importing Express; it now imports/instantiates Express, and the API handler route is covered by a test. A real Vercel deployment still needs redeployment and verification.
 
 **NOT verified (no Atlas/Gemini credentials, no MongoDB binary in the sandbox, no Vercel account):**
 1. Any real DB behaviour: `services.js` (aggregation for progress, `$pull` from Focus, `applyProposal` rollback, `findOneAndUpdate` upsert), successful Atlas connection, `ensureDb` reconnect behaviour on a frozen/thawed serverless instance, `/health` returning 200. Run `npm run smoke` (in `backend/`).
@@ -94,7 +95,9 @@ Current changes verified: `npm.cmd run lint`, `npm.cmd test` (23/23), `npm.cmd r
 - Preview deployments need their origin in `FRONTEND_ORIGIN` and a matching `VITE_API_URL` to work.
 - Voice transcript has no speech-start events from Gemini; the "listening" indicator is inferred from input transcription.
 - Bundle is ~640 kB because `@google/genai` ships to the browser; code-split if it matters.
-- Playback relies on the browser's echo cancellation; headphones recommended.
+- Playback feedback is additionally gated in the AudioWorklet; interruption detection still relies
+  on the browser's echo cancellation to distinguish the user's voice from speaker echo. Headphones
+  recommended.
 - No transactions: `applyProposal` rolls back manually on clip insert failure; a crash mid-way could leave a movie without clips.
 - Focus docs accumulate one per day (no cleanup).
 - Optimistic UI only for clip status; other mutations wait for the server.
