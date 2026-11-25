@@ -42,13 +42,13 @@ function base64ToInt16(b64) {
  * - Microphone audio is converted to 16 kHz PCM by an AudioWorklet; the coach's 24 kHz PCM
  *   replies are scheduled for gapless playback and flushed when the user interrupts.
  * - This hook knows nothing about movies or the dashboard. When the model calls the
- *   `propose_plan` tool it hands the raw arguments to `onProposal(args)`, which returns
- *   `{ ok, message }`; that is sent back to the model as the tool result.
+ *   tool call it hands the name and raw arguments to `onToolCall(name, args)`, which returns
+ *   `{ ok, message, ... }`; that is sent back to the model as the tool result.
  *
  * The message handling follows Google's Live API docs but has not been exercised against a
  * live session yet (see AGENTS.md).
  */
-export function useVoiceSession({ onProposal }) {
+export function useVoiceSession({ onToolCall }) {
   const [status, setStatus] = useState('idle'); // idle | connecting | connected | error
   const [error, setError] = useState(null);
   const [transcript, setTranscript] = useState([]);
@@ -68,10 +68,10 @@ export function useVoiceSession({ onProposal }) {
   const idCounter = useRef(0);
   const openRef = useRef({ user: null, coach: null });
   const handledCalls = useRef(new Set());
-  const onProposalRef = useRef(onProposal);
+  const onToolCallRef = useRef(onToolCall);
   useEffect(() => {
-    onProposalRef.current = onProposal;
-  }, [onProposal]);
+    onToolCallRef.current = onToolCall;
+  }, [onToolCall]);
 
   const stopPlayback = useCallback(() => {
     for (const src of sourcesRef.current) {
@@ -160,14 +160,10 @@ export function useVoiceSession({ onProposal }) {
       if (handledCalls.current.has(fc.id)) continue;
       handledCalls.current.add(fc.id);
       let response;
-      if (fc.name !== 'propose_plan') {
-        response = { ok: false, message: `Unknown tool "${fc.name}".` };
-      } else {
-        try {
-          response = await onProposalRef.current(fc.args ?? {});
-        } catch (err) {
-          response = { ok: false, message: `Could not process the tool arguments: ${err.message}` };
-        }
+      try {
+        response = await onToolCallRef.current(fc.name, fc.args ?? {});
+      } catch (err) {
+        response = { ok: false, message: `The action failed: ${err.message}` };
       }
       responses.push({ id: fc.id, name: fc.name, response });
     }

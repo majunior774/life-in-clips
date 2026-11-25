@@ -57,6 +57,7 @@ async function request(path, { method = 'GET', body, okStatuses = [] } = {}) {
 export const api = {
   // 503 is a valid health answer (server up, database down): the body says which.
   health: () => request('/health', { okStatuses: [503] }),
+  workspace: () => request('/workspace').then((d) => d.workspace),
   listMovies: () => request('/movies').then((d) => d.movies),
   getMovie: (id) => request(`/movies/${id}`).then((d) => d.movie),
   createMovie: (body) => request('/movies', { method: 'POST', body }).then((d) => d.movie),

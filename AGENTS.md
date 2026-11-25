@@ -8,7 +8,7 @@ Persistent context for coding agents. User-facing docs live in `README.md`; do n
 
 Voice-first accountability coach that turns brain-dumps into small actionable work. Vocabulary: **Movie** = goal, **Clip** = small task, **Today's Focus** = ≤3 clips for today, **Progress** = completed clips / total.
 
-- AI never silently creates, edits or deletes data. AI output is a *proposal*; only the user's Approve click calls `/api/proposals/apply`. Keep tool definitions narrow; validate every argument server-side.
+- The coach may act on data only when the user's latest request asks for it (instructions rule 7), through the same validated REST API as the UI (`frontend/src/lib/coachTools.js`). New movies are *proposals* (saved by the Approve click or the user telling the coach to approve). Every action is shown in the Coach activity list, with Undo where possible. Deletes are never executed by a tool: `request_delete` shows a confirmation the user must click. Keep tool definitions narrow; validate every argument server-side.
 - Progress is computed from clips. Never store a percentage.
 - Secrets stay server-side. The browser gets only single-use, short-lived Gemini Live tokens. Never log connection strings or keys.
 - No silent fallbacks: if Atlas or Gemini is unavailable, say so. No fake successful responses.
@@ -112,3 +112,7 @@ Current changes verified: `npm.cmd run lint`, `npm.cmd test` (backend 23/23; fro
 2. Open the app, press Start talking, and walk through a real brain-dump → proposal → approve. Fix message-shape or session-config mismatches in `useVoiceSession.js` / `coach.js` / `routes.js` (items 2–3 above). Add a test for whatever breaks.
 3. Deploy both projects following the README's Vercel guide; confirm `/api/health`, the unlock screen, CORS and voice over HTTPS. Record what differed from the guide here.
 4. Then, in order: clip reordering, coach read-only awareness improvements, real user accounts (owner filter in `services.js`, gate `/api/voice/session`), a CI workflow running lint/test/build.
+
+## Coach tools (added in branch `coach-powers`)
+
+Declared in `backend/src/coach.js` (`ACTION_DECLARATIONS`, locked into the Gemini token) and executed in the browser by `frontend/src/lib/coachTools.js` (`runCoachTool`, API injected so it is unit-tested in `frontend/test/`): `get_workspace`, `update_clip`, `update_movie`, `add_clips` (≤10, sequential), `set_todays_focus`, `approve_pending_plan`, `reject_pending_plan`, `request_delete`, plus `propose_plan`. `GET /api/workspace` feeds `get_workspace`. UI state (pending plans in a ref for synchronous reads, delete confirmations, activity/undo) lives in `VoiceCoach.jsx`; `useWorkspace().perform` runs a change and refreshes without the full-page loading state (which would unmount the voice session). Verified with unit tests and a headless-browser run against a mock Gemini socket; **not verified with the real model**: whether it picks the right tool/ids and respects "only when asked" (prompt rule 7-8). Archived movies are invisible to the coach.

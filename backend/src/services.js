@@ -206,3 +206,28 @@ export async function workspaceSummary() {
   }
   return lines.join('\n');
 }
+
+/** Compact snapshot with ids for the voice coach's get_workspace tool (non-archived movies). */
+export async function workspaceSnapshot() {
+  const movies = await Movie.find({ status: { $ne: 'archived' } }).sort({ createdAt: -1 }).limit(20);
+  const clips = await Clip.find({ movieId: { $in: movies.map((m) => m._id) } }).sort({ order: 1 });
+  const byMovie = new Map();
+  for (const c of clips) {
+    const k = String(c.movieId);
+    if (!byMovie.has(k)) byMovie.set(k, []);
+    byMovie.get(k).push(c.toJSON());
+  }
+  return movies.map((m) => {
+    const j = m.toJSON();
+    const cs = byMovie.get(j.id) ?? [];
+    return {
+      id: j.id,
+      title: j.title,
+      description: j.description,
+      status: j.status,
+      targetDate: j.targetDate,
+      progress: { total: cs.length, completed: cs.filter((c) => c.status === 'completed').length },
+      clips: cs.slice(0, 40).map((c) => ({ id: c.id, title: c.title, status: c.status, priority: c.priority, dueDate: c.dueDate })),
+    };
+  });
+}
